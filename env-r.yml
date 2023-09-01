@@ -1,0 +1,29 @@
+name: renv
+channels:
+    - conda-forge
+    - defaults
+dependencies:
+    - r-essentials >= 4.3.0
+    - r-base
+    - r-broom
+    - r-corrplot
+    - r-conflicted
+    - r-cowplot
+    - r-furrr
+    - r-ggextra
+    - r-ggforce
+    - r-ggfortify
+    - r-ggraph
+    - r-ggrepel
+    - r-ggpubr
+    - r-ggsci
+    - r-gridgraphics
+    - r-gplots
+    - r-magick
+    - r-patchwork
+    - r-pheatmap
+    - r-rcolorbrewer
+    - r-tidyverse
+    - r-upsetr
+    - r-xml2
+    - r-venn
