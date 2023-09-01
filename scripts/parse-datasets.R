@@ -116,7 +116,7 @@ link.patent.works <-
 write_tsv(patents,
           file.path('data', dataset, 'patents.tsv.gz'),
           quote = 'needed')
-write_tsv(patents.ipc,
+write_tsv(ipc,
           file.path('data', dataset, 'ipc.tsv.gz'),
           quote = 'needed')
 write_tsv(works,
