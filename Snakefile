@@ -81,23 +81,15 @@ rule overview:
         
 ################################################################################
 
-rule ipc:
+rule markov_chain:
     input:
-        script = 'scripts/ipc-analysis.R',
-        xs = [
-            'data/data-patents.tsv.gz',
-            'data/data-works.tsv.gz',
-            'data/data-link.tsv.gz',
-            'data/data-patents-ipc.tsv.gz',
-            'data/ipc.tsv.gz'
-        ]
+        script = 'scripts/markov-chain.R',
+        helper = 'scripts/helper_load.R',
+        xs = dataset_data
     output:
-        'data/ipc-count-correlations.png',
-        'data/ipc-mean-var.png',
-        'data/ipc-year-correlation.png',
-        'data/ipc-mc.png',
-        'data/ipc-heatmap.png',
-        'data/ipc-markov-chain.tsv.gz'
+        'analysis/markov-chain.tsv.gz',
+        'analysis/markov-chain-correlations.png',
+        'analysis/markov-chain-scatter.png',
     shell:
         """
         ./{input.script}
@@ -113,4 +105,4 @@ rule all:
         [ 'data/{}/patents.tsv.gz'.format(i) for i in datasets ],
         'analysis/overview-datasets.png',
         'analysis/overview-journals.png',
-        #'data/ipc-heatmap.png',
+        'analysis/markov-chain.tsv.gz',
