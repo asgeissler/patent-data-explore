@@ -1,7 +1,12 @@
 # name of datasets to process and downloaded to the 'downloaded-datasets' dir
 datasets = ['CRISPR', 'Cyanobacteria']
 
-rule A_ipc:
+from itertools import product
+
+################################################################################
+# Download and parse IPC scheme
+
+rule download_ipc:
     output:
         'data/ipc-scheme.xml'
     shell:
@@ -13,7 +18,7 @@ rule A_ipc:
         mv EN_ipc_scheme_20230101.xml ipc-scheme.xml
         rm ipc_scheme_20230101.zip
         """
-
+        
 rule parse_ipc:
     input:
         script = 'scripts/parse-ipc.R',
@@ -27,6 +32,9 @@ rule parse_ipc:
         """
         ./{input.script}
         """
+        
+################################################################################
+# Pre-process lens.org downloads
 
 rule parse_dataset:
     input:
@@ -43,29 +51,35 @@ rule parse_dataset:
         """
         ./{input.script} {threads} {input.xs}
         """
+        
+def dataset_data(wildcards):
+    "Helper to list all output files from pre-processing"
+    xs = [
+        'patents.tsv.gz',
+        'ipc.tsv.gz',
+        'works.tsv.gz',
+        'links-patent-work.tsv.gz'
+    ]
+    for data, file in product(datasets, xs):
+      yield 'data/{}/{}'.format(data, file)
+        
+################################################################################
+# Create overview for datasets
 
 rule overview:
     input:
         script = 'scripts/overview.R',
-        xs = [
-            'data/data-patents.tsv.gz',
-            'data/data-works.tsv.gz',
-            'data/data-link.tsv.gz',
-            'data/data-patents-ipc.tsv.gz',
-            'data/ipc.tsv.gz'
-        ]
+        helper = 'scripts/helper_load.R',
+        xs = dataset_data
     output:
-        'data/overview-patents-years.png',
-        'data/overview-works-years.png',
-        'data/overview-journals.png',
-        'data/overview-works-citation-scatter.png',
-        'data/overview-top20-works.tsv',
-        'data/overview-top20-works-by-citations.tsv',
-        'data/overview-top20-patents.tsv'
+        'analysis/overview-datasets.png',
+        'analysis/overview-journals.png',
     shell:
         """
         ./{input.script}
         """
+        
+################################################################################
 
 rule ipc:
     input:
@@ -90,12 +104,13 @@ rule ipc:
         """
 
 
+################################################################################
 
 rule all:
     input:
         'data/ipc-scheme.xml',
         'data/ipc.tsv.gz',
         [ 'data/{}/patents.tsv.gz'.format(i) for i in datasets ],
-        #'data/data-patents.tsv.gz',
-        #'data/overview-patents-years.png',
+        'analysis/overview-datasets.png',
+        'analysis/overview-journals.png',
         #'data/ipc-heatmap.png',
