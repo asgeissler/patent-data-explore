@@ -31,7 +31,9 @@ ipc.freqs <-
   ) |>
   # exclude IPCs that do not appear in dataset at all
   drop_na(n.ipc) |>
-  # exclude year without patenta (eg CRISPR dataset is 'young')
+  # exclude in the scheme outdated IPCs
+  semi_join(ipc.titles, 'ipc') |>
+  # exclude year without patents (eg CRISPR dataset is 'young')
   drop_na(n.year)
 
 ################################################################################
@@ -66,7 +68,7 @@ p.cor <-
   theme(axis.title = element_blank(), axis.text = element_blank(),
         axis.line = element_blank(), axis.ticks = element_blank()) +
   plot_annotation(title = 'Pearson correlations between no. patents...')
-p.cor
+# p.cor
 
 ################################################################################
 # Correlation to proceeding year
@@ -145,9 +147,19 @@ p.nb <-
 
 
 # Assuming NP -> Conditional is Poisson
+
+# Exclyde per IPC the first year with a patent (avoid "flank" calling)
+ipc.freqs |>
+  filter(n.year.ipc > 0) |>
+  group_by(dataset, ipc) |>
+  summarize(first.year = min(priority.year)) |>
+  ungroup() -> ipc.first
+
 mc.chain <-
   ipc.freqs |>
   select(dataset, priority.year, ipc, n.year.ipc) |>
+  left_join(ipc.first, c('dataset', 'ipc')) |>
+  filter(priority.year > first.year) |>
   mutate(before = priority.year - 1) |>
   inner_join(ipc.freqs, c('ipc', 'before' = 'priority.year', 'dataset')) |>
   transmute(
