@@ -80,6 +80,7 @@ rule overview:
         """
         
 ################################################################################
+# Run Markov Chain model to identify changes in IPC trends
 
 rule markov_chain:
     input:
@@ -90,6 +91,24 @@ rule markov_chain:
         'analysis/markov-chain.tsv.gz',
         'analysis/markov-chain-correlations.png',
         'analysis/markov-chain-scatter.png',
+    shell:
+        """
+        ./{input.script}
+        """
+        
+################################################################################
+# Check for enrichment by scholarly works
+
+rule enrich:
+    input:
+        script = 'scripts/trend-enrich.R',
+        helper = 'scripts/helper_load.R',
+        xs = dataset_data,
+        chain = 'analysis/markov-chain.tsv.gz'
+    output:
+        'analysis/trend-heatmap.png',
+        'analysis/trend-enrich.png',
+        'analysis/trend-enrich.tsv'
     shell:
         """
         ./{input.script}
@@ -106,3 +125,4 @@ rule all:
         'analysis/overview-datasets.png',
         'analysis/overview-journals.png',
         'analysis/markov-chain.tsv.gz',
+        'analysis/trend-enrich.tsv'

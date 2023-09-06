@@ -13,7 +13,7 @@ mc.chain <- read_tsv('analysis/markov-chain.tsv.gz')
 
 mc.interest <-
   mc.chain |>
-  filter(change > 0) |>
+  filter(p.step <= 1e-10, change >= 100) |>
   group_by(dataset, ipc) |>
   summarize(min.p = min(p.step)) |>
   group_by(dataset) |>
@@ -24,8 +24,6 @@ mc.interest <-
     title = case_when(
       ipc == 'C12N15/11' ~ 'Recombinant DNA-technology',
       ipc == 'A23L25/00' ~ 'Preparation or treatment of nutmeat/seed food',
-      ipc == 'G16B50/10' ~ 'Annotations (bioinformatics)',
-      ipc == 'A23L1/00' ~ 'Foods or foodstuffs',
       TRUE ~ title
     ),
     nice = sprintf(
@@ -67,6 +65,8 @@ colors <-
       set_names(x = cbPalette[2:3])
   )
 
+apply(xs.mat, 1, scale) |> max()
+
 pheatmap(
   xs.mat,
   scale = 'row',
@@ -77,13 +77,47 @@ pheatmap(
   ),
   annotation_colors = colors,
   color = rev(colorRampPalette(RColorBrewer::brewer.pal(11, 'RdBu'))(99)),
+  legend_breaks = c(seq(-6, 6, 2), 4.5),
+  legend_labels = c(as.character(seq(-6, 6, 2)), "row z-score\n"),
   filename = 'analysis/trend-heatmap.png',
   width = 12,
   height = 8
 )
 dev.off()
 
+################################################################################
+# Overlapping patents between trends
 
+trend.patent <-
+  mc.interest |>
+  select(ipc) |>
+  left_join(ipc, c('ipc')) |>
+  select(ipc, lens.id) |>
+  unique()
+
+trend.shared <-
+  trend.patent |>
+  left_join(trend.patent, 'lens.id') |>
+  filter(ipc.x < ipc.y) |>
+  count(ipc.x, ipc.y, name = 'shared') |>
+  right_join(
+    with(mc.interest, crossing(ipc.x = ipc, ipc.y = ipc)) |>
+      filter(ipc.x < ipc.y),
+    c('ipc.y', 'ipc.x')
+  ) |>
+  mutate_at('shared', replace_na, 0)
+
+sprintf('%.1f ±%.1f',
+  trend.shared |>
+    pull(shared) |>
+    mean(),
+  trend.shared |>
+    pull(shared) |>
+    sd()
+) |> print()
+"251.3 ±643.5"
+
+################################################################################
 ################################################################################
 # Enrichment test for papers predominately present in trend
 
@@ -95,13 +129,13 @@ x.total <-
 x.trend <-
   mc.interest |>
   select(dataset, nice, ipc) |>
-  left_join(ipc, c('dataset', 'ipc')) |>
+  inner_join(ipc, c('dataset', 'ipc')) |>
   count(dataset, nice, name = 'trend.patents')
 
 x.work.trend <-
   mc.interest |>
   select(dataset, nice, ipc) |>
-  left_join(ipc, c('dataset', 'ipc')) |>
+  inner_join(ipc, c('dataset', 'ipc')) |>
   inner_join(links, c('dataset', 'lens.id' = 'patent'),
              relationship = 'many-to-many') |>
   count(dataset, work, nice, name = 'work.trend.references')
@@ -110,7 +144,7 @@ x.work.total <-
   x.work.trend |>
   select(work, dataset) |>
   unique() |>
-  left_join(links, c('dataset', 'work')) |>
+  inner_join(links, c('dataset', 'work')) |>
   count(dataset, work, name = 'work.total')
 
 # Combine and run fisher test
@@ -119,9 +153,26 @@ enrich.dat <-
   left_join(x.work.total, 'dataset') |>
   left_join(x.work.trend, c('dataset', 'work')) |>
   left_join(x.trend, c('dataset', 'nice'))
+################################################################################
+# Determine min number cutoff
+
+p.minref <-
+  enrich.dat |>
+  ggplot(aes(work.trend.references, color = dataset)) +
+  stat_ecdf(size = 1.2) +
+  scale_y_continuous(breaks = seq(0, 1, .1)) +
+  scale_x_log10() +
+  scale_color_manual(values = cbPalette[2:3]) +
+  geom_hline(yintercept = .9, color = 'red') +
+  geom_vline(xintercept = 10, color = 'red') +
+  xlab('No. patent references per scholalry work in IPC') +
+  ylab('Empirical cumulative density') +
+  theme_pubr(18)
+
+################################################################################
+# Fisher test of citation enrichment
 enrich.dat |>
-  # Fisher test of citation enrichment
-  filter(work.trend.references >= 5) |>
+  filter(work.trend.references >= 10) |>
   group_by_all() |>
   do(
     pval = matrix(c(.$work.trend.references,                .$trend.patents - .$work.trend.references,
@@ -143,14 +194,9 @@ enrich.dat |>
   ungroup() -> work.enriched
 
 
+
 ################################################################################
 
-# cutoff enrichment by quantile of dataset
-var.cut <-
-  work.enriched |>
-  group_by(dataset) |>
-  summarize(m = quantile(enrich, .9)) |>
-  with(set_names(m, dataset))
 
 p.scatter <-
   work.enriched |>
@@ -164,64 +210,52 @@ p.scatter <-
   geom_hline(yintercept = - log10(1e-3), color = 'red') +
   annotate('text', .5, 30, color = 'red', label = '0.001', size = 7) +
   # variable cut-off
-  geom_vline(xintercept = var.cut, color = cbPalette[2:3]) +
+  geom_vline(xintercept = 10, color = 'red') +
   theme_pubr(18)
 
-p <- ggExtra::ggMarginal(p.scatter, type = 'boxplot', groupColour = TRUE)
+p.scatter <- ggExtra::ggMarginal(p.scatter, type = 'boxplot', groupColour = TRUE)
 
-ggsave('analysis/trend-enrich.png', p,
-       width = 8, height = 6, dpi = 400)
+
+################################################################################
+# Potentially interesting papers
+
+my.sel <-
+  work.enriched |>
+  filter(padj <= 1e-3, enrich >= 10) |>
+  left_join(works, c('dataset', 'work' = 'lens.id'))
+
+p.sel <-
+  my.sel |>
+  count(dataset, nice) |>
+  arrange(desc(n)) |>
+  mutate_at('nice', fct_inorder) |>
+  ggplot(aes(nice, n, fill = dataset)) +
+  scale_fill_manual(values = cbPalette[2:3]) +
+  geom_bar(stat = 'identity') +
+  xlab(NULL) +
+  ylab('No. signigicantly enriched scholarly works') +
+  coord_flip() +
+  theme_pubr(18)
+
 
 ################################################################################
 
-work.enriched |>
-  filter(padj <= 1e-3) |>
-  mutate(var = var.cut[dataset]) |>
-  filter(enrich >= var) |>
-  select(dataset, nice, work, enrich) |>
-  spread(work, enrich, fill = 0) -> foo
-
-foo |>
-  select_if(is.numeric) |>
-  as.matrix() |>
-  magrittr::set_rownames(foo$nice) -> bar
-
-pheatmap(
-  log10(bar + 1),
-  # bar,
-  show_colnames = FALSE,
-  scale = 'none',
-  annotation_row = with(
-    foo,
-    data.frame(dataset = dataset, row.names = nice)
-  ),
-  annotation_colors = colors,
-  # color = rev(colorRampPalette(RColorBrewer::brewer.pal(11, 'GnBu'))(99)),
-  color = colorRampPalette(RColorBrewer::brewer.pal(9, 'Reds'))(99),
-  filename = 'analysis/trend-enrich-heatmap.png',
-  width = 12,
-  height = 5
-)
-dev.off()
-
-################################################################################
-
-work.enriched |>
-  filter(padj <= 1e-3) |>
-  mutate(var = var.cut[dataset]) |>
-  filter(enrich >= var) |>
-  select(work, dataset) |>
-  unique() |>
-  count(work) |> count(n)
-  group_by(dataset, work) |>
+highlight <-
+  my.sel |>
+  count(dataset, nice, name = 'row') |>
+  left_join(my.sel, c('dataset', 'nice')) |>
+  # keep most sig per IPC
+  # count(dataset, nice)
+  group_by(dataset, nice) |>
+  # multiple slices to untie
+  slice_min(padj) |>
   slice_max(enrich) |>
-  arrange(dataset, desc(enrich), desc(work.total)) |>
-  group_by(dataset) |>
-  slice(1:5) |>
+  slice_max(year) |>
   ungroup() |>
-  left_join(works, c('dataset', 'work' = 'lens.id')) |>
   mutate_at('journal', str_remove, ' \\(New York.*$') |>
   mutate(journal = case_when(
+    journal == 'Proceedings of the National Academy of Sciences of the United States of America' ~
+      'Proceedings of the National Academy of Sciences',
     journal == 'TAG. Theoretical and applied genetics. Theoretische und angewandte Genetik' ~
       'Theoretical and Applied Genetics',
     journal == 'Neurogastroenterology and motility : the official journal of the European Gastrointestinal Motility Society' ~
@@ -232,26 +266,48 @@ work.enriched |>
   mutate_at(c('volume', 'issue'), as.character) |>
   mutate_at(c('volume', 'issue'), replace_na, '') |>
   mutate_at('authors', str_replace, ';.*$', ', et al.') |>
-  # mutate_at('title', str_replace, '(?<=.{40}).*', '...') |>
-  arrange(desc(work.total)) |>
+  mutate_at('title', str_replace, '(?<=.{70}).*', '...') |>
+  mutate_at('enrich', round, 1) |>
+  mutate_at('padj', sprintf, fmt = '%.2e') |>
+  arrange(row) |>
+  slice(- row) |>
   select(
-    Dataset = dataset,
-    # nice,
-    'References\nglobally' = work.total,
-    # 'References\nin trend' = work.trend.references,
-    # Enrichment = enrich,
-    # FDR = padj,
+    IPC = nice,
     Title = title,
     Authors = authors,
     'Journal/Publisher' = journal,
     Year = year,
     DOI = doi,
+    'References\nIPC' = work.trend.references,
+    'References\ndataset' = work.total,
+    'Patents\nin IPC' = trend.patents,
+    Enrichment = enrich,
+    FDR = padj
   ) |>
-  unique() |>
-  View()
+  unique()
+
+p.table <-
+  highlight |>
+  mutate_at('IPC', str_remove, '^.* \\(') |>
+  mutate_at('IPC', str_remove, '\\)$') |>
+  select(- c(Authors, `Journal/Publisher`, Year)) |>
   gridExtra::tableGrob(rows = NULL, 
                        theme = gridExtra::ttheme_default(14)) |>
   plot_grid() +
   theme_pubr(18) +
   theme(axis.title = element_blank(), axis.text = element_blank(),
         axis.line = element_blank(), axis.ticks = element_blank())
+
+################################################################################
+# single figure
+
+
+((((p.minref / p.scatter) | p.sel) & theme_pubr(18))
+ / p.table) +
+  plot_layout(heights = c(1.5, 1)) +
+  plot_annotation(tag_levels = 'A')
+
+ggsave('analysis/trend-enrich.png',
+       width = 19, height = 12, dpi = 400)
+
+write_tsv(highlight, 'analysis/trend-enrich.tsv')
