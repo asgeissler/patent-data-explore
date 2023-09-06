@@ -183,6 +183,12 @@ p.volcano <-
   ggplot(aes(change, - log10(p.step), color = dataset)) +
   geom_point(alpha = 0.7) +
   scale_color_manual(values = cbPalette[2:3]) +
+  geom_hline(yintercept = 10, color = 'red') +
+  geom_vline(xintercept = c(-100, 100), color = 'red') +
+  annotate('text', x = -200, y = 200, label = '± 100',
+           color = 'red', size = 5) +
+  annotate('text', x = -500, y = 0, label = 'prob. 1e-10',
+           color = 'red', size = 5) +
   xlab('Absolute change in no. patents\nfrom preceeding year') +
   ylab('- log10(Poisson probability)') +
   theme_pubr(18)
