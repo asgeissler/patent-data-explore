@@ -83,41 +83,7 @@ pheatmap(
   width = 12,
   height = 8
 )
-dev.off()
-
-################################################################################
-# Overlapping patents between trends
-
-trend.patent <-
-  mc.interest |>
-  select(ipc) |>
-  left_join(ipc, c('ipc')) |>
-  select(ipc, lens.id) |>
-  unique()
-
-trend.shared <-
-  trend.patent |>
-  left_join(trend.patent, 'lens.id') |>
-  filter(ipc.x < ipc.y) |>
-  count(ipc.x, ipc.y, name = 'shared') |>
-  right_join(
-    with(mc.interest, crossing(ipc.x = ipc, ipc.y = ipc)) |>
-      filter(ipc.x < ipc.y),
-    c('ipc.y', 'ipc.x')
-  ) |>
-  mutate_at('shared', replace_na, 0)
-
-sprintf('%.1f ±%.1f',
-  trend.shared |>
-    pull(shared) |>
-    mean(),
-  trend.shared |>
-    pull(shared) |>
-    sd()
-) |> print()
-"251.3 ±643.5"
-
-################################################################################
+#dev.off()
 ################################################################################
 # Enrichment test for papers predominately present in trend
 
