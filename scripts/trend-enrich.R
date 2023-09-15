@@ -236,7 +236,7 @@ highlight <-
   mutate_at('enrich', round, 1) |>
   mutate_at('padj', sprintf, fmt = '%.2e') |>
   arrange(row) |>
-  slice(- row) |>
+  select(- row) |>
   select(
     IPC = nice,
     Title = title,
