@@ -2,9 +2,10 @@
 
 This repository contains the data and analysis workflow related to the study:
 
-"Patent data-driven analysis of literature associations with changing innovation trends"   
+"Patent data-driven analysis of literature associations with changing innovation trends."   
 Adrian Sven Geissler, Jan Gorodkin, and Stefan Ernst Seemann.  
-*under review*
+Frontiers in Research Metrics and Analytics, 2024.   
+https://www.frontiersin.org/journals/research-metrics-and-analytics/articles/10.3389/frma.2024.1432673/
 
 ## Material
 
